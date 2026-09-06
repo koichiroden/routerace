@@ -24,8 +24,14 @@ config の1ルートは以下の形:
 あるが線形状データが無い路線)は、前後の駅を直線で結ぶフォールバックになる。
 """
 import json
+import math
 
 from .station_db import haversine_km, get_station_lonlat
+
+# 隣接区間の進行方位(bearing)がこの角度(度)以上急変したら「逆走キンク」と
+# みなして頂点を除去する。緩やかな本物のカーブ(せいぜい数十度)は残し、
+# ほぼ真逆になる異常な頂点だけを狙い撃ちする値。
+BACKTRACK_BEARING_DEG = 120
 
 
 def load_line_geoms(geojson_path):
@@ -66,6 +72,115 @@ def cumulative_dist(coords):
     for i in range(1, len(coords)):
         cum.append(cum[-1] + haversine_km(coords[i - 1], coords[i]))
     return cum
+
+
+def _bearing_deg(a, b):
+    lon1, lat1 = a
+    lon2, lat2 = b
+    dlon = math.radians(lon2 - lon1)
+    lat1r, lat2r = math.radians(lat1), math.radians(lat2)
+    y = math.sin(dlon) * math.cos(lat2r)
+    x = math.cos(lat1r) * math.sin(lat2r) - math.sin(lat1r) * math.cos(lat2r) * math.cos(dlon)
+    return math.degrees(math.atan2(y, x)) % 360
+
+
+def _points_close(a, b, tol=1e-5):
+    return abs(a[0] - b[0]) < tol and abs(a[1] - b[1]) < tol
+
+
+def collapse_revisits(coords, tol_km=0.05, lookback=800, min_gap=3, max_iterations=50):
+    """
+    routes.geojson にはまれに「ある地点まで進んで、そこから先の経路のどこかで
+    ほぼ同じ地点をもう一度通ってしまう」往復・ループ状の重複が混じっている
+    (例: 湘南新宿ラインの横浜駅付近。複数の物理経路をデータ生成時に結合した
+    際の重複と見られる)。そのまま描画すると、動画内で車両アイコンが一瞬だけ
+    後ろに戻っているように見えてしまう。
+
+    座標が(既定50m以内に)再訪されている最も早いペアを見つけ、その間の
+    区間をまるごと畳み込む(=1回だけ通ったことにする)。入れ子や複数箇所の
+    重複があっても、無くなるまで繰り返し処理する。
+    戻り値は (処理後の座標列, 警告文リスト)。
+    """
+    coords = list(coords)
+    warnings = []
+    for _ in range(max_iterations):
+        n = len(coords)
+        found = None
+        for i in range(n):
+            limit = min(n, i + lookback)
+            for j in range(i + min_gap, limit):
+                if haversine_km(coords[i], coords[j]) < tol_km:
+                    found = (i, j)
+                    break
+            if found:
+                break
+        if not found:
+            break
+        i, j = found
+        warnings.append(
+            f"経路が同じ地点(座標 {coords[i]} 付近)を再訪していたため、"
+            f"{j - i}点分のループを畳み込みました。"
+        )
+        del coords[i + 1:j + 1]
+    else:
+        warnings.append("collapse_revisits: max_iterations に達しました。ループが残っている可能性があります。")
+    return coords, warnings
+
+
+def remove_single_vertex_noise(coords, bearing_jump_deg=BACKTRACK_BEARING_DEG,
+                                single_vertex_km=0.5, max_passes=20):
+    """
+    collapse_revisits では拾えない、ごく短い範囲だけ寄り道してすぐ戻る
+    1頂点だけのノイズ(GPS/デジタイズ誤差)を取り除く。進行方位(bearing)が
+    急反転(既定120度以上)し、かつその寄り道の余分な距離(detour - chord)が
+    小さい(既定0.5km未満)頂点だけを間引く。大きい場合は本物の急カーブと
+    みなして触らない。戻り値は (処理後の座標列, 警告文リスト)。
+    """
+    coords = list(coords)
+    warnings = []
+    confirmed_genuine = set()
+
+    def rk(p):
+        return (round(p[0], 6), round(p[1], 6))
+
+    for _ in range(max_passes):
+        if len(coords) < 5:
+            break
+        bearings = [_bearing_deg(coords[i], coords[i + 1]) for i in range(len(coords) - 1)]
+        tip = None
+        for i in range(1, len(bearings)):
+            if rk(coords[i]) in confirmed_genuine:
+                continue
+            d = abs((bearings[i] - bearings[i - 1] + 180) % 360 - 180)
+            if d >= bearing_jump_deg:
+                tip = i
+                break
+        if tip is None:
+            break
+
+        chord = haversine_km(coords[tip - 1], coords[tip + 1])
+        detour = haversine_km(coords[tip - 1], coords[tip]) + haversine_km(coords[tip], coords[tip + 1])
+        if detour - chord < single_vertex_km:
+            warnings.append(
+                f"孤立したノイズ頂点を1点間引きました(座標 {coords[tip]} 付近、"
+                f"寄り道距離 {detour - chord:.2f}km)。"
+            )
+            del coords[tip]
+            continue
+
+        confirmed_genuine.add(rk(coords[tip]))
+        warnings.append(
+            f"進行方向が急反転する頂点がありますが、寄り道が大きいため保持しました"
+            f"(座標 {coords[tip]} 付近)。"
+        )
+    return coords, warnings
+
+
+def remove_backtracking(coords):
+    """collapse_revisits -> remove_single_vertex_noise の順に適用するショートカット。"""
+    coords, w1 = collapse_revisits(coords)
+    coords, w2 = remove_single_vertex_noise(coords)
+    return coords, w1 + w2
 
 
 def build_route(route_cfg, line_geoms, station_db):
@@ -123,6 +238,9 @@ def build_route(route_cfg, line_geoms, station_db):
         if polyline and piece and polyline[-1] == piece[0]:
             piece = piece[1:]
         polyline.extend(piece)
+
+    polyline, back_warnings = remove_backtracking(polyline)
+    warnings.extend(back_warnings)
 
     cum = cumulative_dist(polyline)
 
