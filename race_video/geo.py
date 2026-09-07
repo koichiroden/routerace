@@ -61,3 +61,14 @@ def project(params, lon, lat):
     px = (x - params["x_min"]) * params["scale"] + params["off_x"]
     py = (y - params["y_min"]) * params["scale"] + params["off_y"]
     return px, py
+
+
+def unproject(params, px, py):
+    """project() の逆変換。画面上のある範囲(例: キャンバス+余白)が
+    実際の経度緯度でどこに当たるかを知りたい時に使う
+    (例: 海岸線データを表示範囲だけに間引く)。"""
+    x = (px - params["off_x"]) / params["scale"] + params["x_min"]
+    y = (py - params["off_y"]) / params["scale"] + params["y_min"]
+    lon = x / params["cos0"] + params["lon_min"]
+    lat = params["lat_max"] - y
+    return lon, lat
