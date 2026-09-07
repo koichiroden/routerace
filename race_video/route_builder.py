@@ -33,6 +33,22 @@ from .station_db import haversine_km, get_station_lonlat
 # ほぼ真逆になる異常な頂点だけを狙い撃ちする値。
 BACKTRACK_BEARING_DEG = 120
 
+# station_db / routes.geojson には存在しない「愛称レベル」の路線名を、
+# 実際に座標・線形データを持つ路線名に読み替えるための対応表。
+# 例: 東海道本線・高崎線・宇都宮線は、駅データ上は全て「上野東京ライン」
+# という1つの(複数系統が混線した)路線名の中に含まれているので、
+# configで "line": "東海道本線" のように書かれた場合はここで
+# "上野東京ライン" に変換してから座標・線形を引く。
+LINE_ALIASES = {
+    "東海道本線": "上野東京ライン",
+    "高崎線": "上野東京ライン",
+    "宇都宮線": "上野東京ライン",
+}
+
+
+def resolve_line_name(line_name):
+    return LINE_ALIASES.get(line_name, line_name)
+
 
 def load_line_geoms(geojson_path):
     with open(geojson_path, encoding="utf-8") as f:
@@ -183,6 +199,46 @@ def remove_backtracking(coords):
     return coords, w1 + w2
 
 
+def _fill_missing_t_min(station_records, route_label):
+    """
+    途中で乗り換えも停車もしない「通過駅」は、config側で t_min を
+    空欄(None)のままにしてよい。ここでは、最初の駅と最後の駅にだけ
+    実際の所要時間(t_min)が入っていることを必須とし、その間の空欄は、
+    実際に組み立てたポリライン上の距離(cum_km)に比例して自動的に
+    補間する。
+
+    最初/最後の駅が空欄の場合は、補間のしようがないため、
+    分かりやすいエラーメッセージで止める。
+    """
+    n = len(station_records)
+    known = [(i, r["t_min"]) for i, r in enumerate(station_records) if r["t_min"] is not None]
+    if not known or known[0][0] != 0 or known[-1][0] != n - 1:
+        raise ValueError(
+            f"[{route_label}] 最初の駅と最後の駅には所要時間(t_min)を必ず指定してください"
+            "(その間の通過駅は空欄のままでよく、自動的に補完されます)。"
+        )
+    warnings = []
+    for (i0, t0), (i1, t1) in zip(known, known[1:]):
+        if i1 - i0 <= 1:
+            continue
+        k0 = station_records[i0]["cum_km"]
+        k1 = station_records[i1]["cum_km"]
+        span = k1 - k0
+        names = [station_records[i]["name"] for i in range(i0 + 1, i1)]
+        warnings.append(
+            f"{route_label}: {names} の所要時間は未入力のため、"
+            f"{station_records[i0]['name']}({t0}分)-{station_records[i1]['name']}({t1}分) "
+            "の間で距離に応じて自動補完しました。"
+        )
+        for i in range(i0 + 1, i1):
+            if span <= 0:
+                frac = (i - i0) / (i1 - i0)
+            else:
+                frac = (station_records[i]["cum_km"] - k0) / span
+            station_records[i]["t_min"] = round(t0 + (t1 - t0) * frac, 2)
+    return warnings
+
+
 def build_route(route_cfg, line_geoms, station_db):
     """1ルート分のポリライン・駅情報を組み立てる。戻り値と warnings のタプル。"""
     stations_cfg = route_cfg["stations"]
@@ -190,13 +246,15 @@ def build_route(route_cfg, line_geoms, station_db):
 
     resolved = []
     for s in stations_cfg:
+        real_line = resolve_line_name(s["line"])
         try:
-            lon, lat = get_station_lonlat(station_db, s["line"], s["name"])
+            lon, lat = get_station_lonlat(station_db, real_line, s["name"])
         except KeyError as e:
             raise KeyError(
                 f"[{route_cfg.get('name', route_cfg.get('key'))}] {e}. "
                 f"station_db.load_station_db() のline_name表記(路線名)と "
-                f"config内の'line'が一致しているか確認してください。"
+                f"config内の'line'(または、その愛称のLINE_ALIASES変換先)が "
+                f"一致しているか確認してください。"
             )
         resolved.append({**s, "lon": lon, "lat": lat})
 
@@ -216,7 +274,7 @@ def build_route(route_cfg, line_geoms, station_db):
         pt_start = (resolved[si]["lon"], resolved[si]["lat"])
         pt_end = (resolved[ei]["lon"], resolved[ei]["lat"])
 
-        segments = line_geoms.get(line_name)
+        segments = line_geoms.get(resolve_line_name(line_name))
         if not segments:
             warnings.append(
                 f"'{line_name}' の線形状データが routes.geojson に無いため、"
@@ -252,7 +310,7 @@ def build_route(route_cfg, line_geoms, station_db):
             "line": s["line"],
             "lon": polyline[idx][0],
             "lat": polyline[idx][1],
-            "t_min": s["t_min"],
+            "t_min": s.get("t_min"),  # 途中駅はNone(未入力)を許容し、下で自動補完する
             "path_index": idx,
             "cum_km": cum[idx],
             "popup": bool(s.get("popup", False)),
@@ -268,7 +326,10 @@ def build_route(route_cfg, line_geoms, station_db):
             f"(config内の駅の並び順が実際の進行方向と逆になっている可能性があります)"
         )
 
-    total_min = stations_cfg[-1]["t_min"]
+    fill_warnings = _fill_missing_t_min(station_records, route_cfg.get("name", route_cfg.get("key")))
+    warnings.extend(fill_warnings)
+
+    total_min = station_records[-1]["t_min"]
     color = route_cfg.get("color") or [230, 230, 230]
 
     result = {
