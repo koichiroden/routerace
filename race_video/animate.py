@@ -217,8 +217,11 @@ def draw_result_panel(canvas_rgba, config, route_list, alpha):
 
 
 def render(config, paths, base_map_rgba, proj, out_dir="output", frames_dir="frames",
-           fps=FPS, fast_preview=False):
-    slug = config.get("slug", "race")
+           fps=FPS, fast_preview=False, out_name=None):
+    # out_name を指定すると、出力ファイル名を config の slug と切り離して
+    # 自由に決められる(configのslugはあくまで configs/<slug>.json という
+    # 保存先ファイル名としてのみ使われる)。
+    slug = out_name or config.get("slug", "race")
     route_list = list(paths.values())
     motions = {r["key"]: RouteMotion(r) for r in route_list}
 
@@ -228,6 +231,10 @@ def render(config, paths, base_map_rgba, proj, out_dir="output", frames_dir="fra
 
     timeline = build_events(config, paths, intro_sec, ratio)
     write_script_files(timeline, config, paths, out_dir=out_dir)
+    # 実況テロップを動画内に焼き込むかどうか。台本(.txt)・字幕(.srt)ファイルは
+    # show_captions の設定に関わらず常に output/ に書き出される
+    # (ナレーション収録や動画編集ソフトでの字幕付けに使える)。
+    show_captions = bool(config.get("show_captions", False))
 
     icons = {r["key"]: load_icon(r_cfg) for r, r_cfg in zip(route_list, config["routes"])}
 
@@ -274,16 +281,17 @@ def render(config, paths, base_map_rgba, proj, out_dir="output", frames_dir="fra
 
         draw_scoreboard(canvas, route_list, motions, real_mins)
 
-        for ev in timeline:
-            if ev["t_start"] <= t <= ev["t_end"]:
-                fade = 1.0
-                if t - ev["t_start"] < 0.15:
-                    fade = (t - ev["t_start"]) / 0.15
-                elif ev["t_end"] - t < 0.15:
-                    fade = (ev["t_end"] - t) / 0.15
-                color = color_by_key.get(ev["speaker_key"], (255, 215, 0))
-                draw_caption(canvas, ev["text"], ev["speaker"], color, alpha=int(255 * max(0, fade)))
-                break
+        if show_captions:
+            for ev in timeline:
+                if ev["t_start"] <= t <= ev["t_end"]:
+                    fade = 1.0
+                    if t - ev["t_start"] < 0.15:
+                        fade = (t - ev["t_start"]) / 0.15
+                    elif ev["t_end"] - t < 0.15:
+                        fade = (ev["t_end"] - t) / 0.15
+                    color = color_by_key.get(ev["speaker_key"], (255, 215, 0))
+                    draw_caption(canvas, ev["text"], ev["speaker"], color, alpha=int(255 * max(0, fade)))
+                    break
 
         if t >= result_start:
             a = min(1.0, (t - result_start) / 0.8)

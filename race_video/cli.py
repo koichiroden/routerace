@@ -24,6 +24,8 @@ def main():
     ap.add_argument("--out-dir", default="output")
     ap.add_argument("--frames-dir", default="frames")
     ap.add_argument("--fast", action="store_true", help="10fpsの低画質プレビューを高速生成")
+    ap.add_argument("--out-name", default=None,
+                     help="出力ファイル名(拡張子なし)。省略時はconfigの'slug'を使う")
     ap.add_argument("--check-stations", action="store_true",
                      help="駅データSHPの品質チェックだけ実行して終了する")
     args = ap.parse_args()
@@ -54,7 +56,7 @@ def main():
     print("=== rendering video ===")
     out_path = render(config, paths, base_map, proj,
                        out_dir=args.out_dir, frames_dir=args.frames_dir,
-                       fast_preview=args.fast)
+                       fast_preview=args.fast, out_name=args.out_name)
     print("done ->", out_path)
 
 
