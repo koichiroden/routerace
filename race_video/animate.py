@@ -81,15 +81,31 @@ def draw_progress_route(canvas_rgba, proj, route, motion, real_min, color):
     lon, lat = motion.lonlat_at(real_min)
     pts.append(project(proj, lon, lat))
     if len(pts) >= 2:
-        layer = Image.new("RGBA", canvas_rgba.size, (0, 0, 0, 0))
-        gd = ImageDraw.Draw(layer)
-        gd.line(pts, fill=color + (140,), width=22, joint="curve")
-        layer = layer.filter(ImageFilter.GaussianBlur(8))
-        canvas_rgba.alpha_composite(layer)
-        layer2 = Image.new("RGBA", canvas_rgba.size, (0, 0, 0, 0))
-        ld = ImageDraw.Draw(layer2)
-        ld.line(pts, fill=(255, 255, 255, 235), width=6, joint="curve")
-        canvas_rgba.alpha_composite(layer2)
+        # GaussianBlurはピクセル数に比例して重いので、キャンバス全体(1080x1920)
+        # ではなく、線の外接矩形+余白だけを切り出してぼかす(見た目は同じまま、
+        # CPUの弱い環境でも1フレームあたりのコストを大きく減らせる)。
+        cw, ch = canvas_rgba.size
+        pad = 60  # ぼかし半径8 + 線幅22 を考慮した余裕
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        bx0 = max(0, int(min(xs) - pad))
+        by0 = max(0, int(min(ys) - pad))
+        bx1 = min(cw, int(max(xs) + pad))
+        by1 = min(ch, int(max(ys) + pad))
+        if bx1 <= bx0 or by1 <= by0:
+            return
+        local_pts = [(x - bx0, y - by0) for x, y in pts]
+
+        crop = Image.new("RGBA", (bx1 - bx0, by1 - by0), (0, 0, 0, 0))
+        gd = ImageDraw.Draw(crop)
+        gd.line(local_pts, fill=color + (140,), width=22, joint="curve")
+        crop = crop.filter(ImageFilter.GaussianBlur(8))
+        canvas_rgba.alpha_composite(crop, (bx0, by0))
+
+        crop2 = Image.new("RGBA", (bx1 - bx0, by1 - by0), (0, 0, 0, 0))
+        ld = ImageDraw.Draw(crop2)
+        ld.line(local_pts, fill=(255, 255, 255, 235), width=6, joint="curve")
+        canvas_rgba.alpha_composite(crop2, (bx0, by0))
 
 
 def draw_popup(canvas_rgba, proj, station, elapsed, color):
@@ -273,7 +289,12 @@ def render(config, paths, base_map_rgba, proj, out_dir="output", frames_dir="fra
             a = min(1.0, (t - result_start) / 0.8)
             draw_result_panel(canvas, config, route_list, alpha=int(255 * a))
 
-        canvas.convert("RGB").save(f"{frames_dir}/frame_{fi:05d}.png")
+        # PNG保存はデフォルト圧縮だとCPUコストが大きく、フレーム書き出し全体の
+        # 最大のボトルネックになっていた(プロファイルで確認済み)。この連番PNG
+        # はffmpegに渡した後すぐ捨てる中間ファイルなので、圧縮率より速度を優先
+        # する(compress_level=1)。CPUが弱い環境(Renderの無料プランなど)での
+        # 生成時間を大きく縮められる。
+        canvas.convert("RGB").save(f"{frames_dir}/frame_{fi:05d}.png", compress_level=1)
         if fi % 60 == 0:
             print(f"  frame {fi}/{n_frames}")
 
