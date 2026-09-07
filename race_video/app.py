@@ -26,12 +26,19 @@ import threading
 import uuid
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template_string, request, send_file
+from flask import Flask, jsonify, render_template_string, request, send_file, send_from_directory
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CONFIGS_DIR = BASE_DIR / "configs"
 OUTPUT_DIR = BASE_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
+
+# 車両アイコン画像置き場。ここに置いたファイルは、駅レースビルダー側で何かを
+# アップロードしなくても、このページ上のドロップダウンから選べるようになる
+# (icon_path は "assets/<ファイル名>" という相対パスとして config JSON に入る)。
+ASSETS_DIR = BASE_DIR / "assets"
+ASSETS_DIR.mkdir(exist_ok=True)
+ALLOWED_ICON_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 # 自分のPCならもっと速く終わるはずだが、Renderの無料プラン(0.1 CPU)などの
 # 非力な環境だとフルクオリティ(30fps)の生成に数十分かかることがあるため、
@@ -42,6 +49,7 @@ _SLUG_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _OUT_NAME_BAD_RE = re.compile(r"[\\/\x00-\x1f]")
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # アイコン画像は8MBまで
 
 jobs = {}
 jobs_lock = threading.Lock()
@@ -102,6 +110,15 @@ def list_configs():
         except Exception:
             title = p.stem
         items.append({"slug": p.stem, "title": title})
+    return items
+
+
+def list_icon_assets():
+    """assets/ にある画像ファイル名の一覧(ファイル名のみ、パスなし)を返す。"""
+    items = []
+    for p in sorted(ASSETS_DIR.iterdir()):
+        if p.is_file() and p.suffix.lower() in ALLOWED_ICON_EXT:
+            items.append(p.name)
     return items
 
 
@@ -190,6 +207,15 @@ PAGE = """<!doctype html>
                    border: 1px solid #ded2ba; background: #fbf8f2; color: #201c16; width: 200px; }
   label.outname-label { font-size: 12.5px; color: #766c5c; display: flex; align-items: center; gap: 6px; }
   input[type="file"] { font-size: 12.5px; }
+  .icon-picker { margin-top: 12px; border-top: 1px dashed #ded2ba; padding-top: 4px; }
+  .icon-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; flex-wrap: wrap; }
+  .icon-row .rname { font-size: 13px; font-weight: 600; min-width: 110px; }
+  .icon-row select { font: inherit; font-size: 12.5px; padding: 5px 6px; border-radius: 6px;
+                      border: 1px solid #ded2ba; background: #fbf8f2; color: #201c16; }
+  .icon-row img.thumb { width: 34px; height: 34px; border-radius: 6px; object-fit: contain;
+                         background: #f0ead9; border: 1px solid #ded2ba; }
+  .icon-row label.upload-lbl { font-size: 11.5px; color: #1a56c9; cursor: pointer; text-decoration: underline; }
+  .icon-row input[type="file"] { display: none; }
 </style>
 </head>
 <body>
@@ -208,6 +234,11 @@ PAGE = """<!doctype html>
       <span class="status" id="clip-status" style="margin-top:0;"></span>
     </div>
     <textarea class="jsonbox" id="paste-json" placeholder='{"slug": "...", "routes": [...] }'></textarea>
+
+    <div class="icon-picker" id="icon-picker">
+      <p class="empty" style="margin:10px 0 0; font-size:12.5px;">JSONを読み込むと、ここでルートごとに車両アイコンを選べます(未指定ならデフォルトのアイコンを使用します)。</p>
+    </div>
+
     <div class="paste-actions">
       <label class="fast"><input type="checkbox" id="paste-fast" checked> 低画質プレビュー(高速)</label>
       <label class="outname-label">出力ファイル名(任意)
@@ -242,6 +273,99 @@ PAGE = """<!doctype html>
   {% endfor %}
 
 <script>
+let knownIcons = {{ icons|tojson }};
+let iconOverrides = {};  // ルートのindex -> icon_path("" ならデフォルトアイコン)
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function routesFromTextarea() {
+  try {
+    const cfg = JSON.parse(document.getElementById("paste-json").value);
+    if (Array.isArray(cfg.routes)) return cfg.routes;
+  } catch (e) { /* JSONが不完全な間は何もしない */ }
+  return null;
+}
+
+function setThumb(imgEl, val) {
+  if (val) { imgEl.src = "/" + val; imgEl.style.display = ""; }
+  else { imgEl.removeAttribute("src"); imgEl.style.display = "none"; }
+}
+
+function renderIconPicker() {
+  const wrap = document.getElementById("icon-picker");
+  const routes = routesFromTextarea();
+  if (!routes || !routes.length) {
+    wrap.innerHTML = '<p class="empty" style="margin:10px 0 0; font-size:12.5px;">JSONを読み込むと、ここでルートごとに車両アイコンを選べます(未指定ならデフォルトのアイコンを使用します)。</p>';
+    return;
+  }
+  wrap.innerHTML = "";
+  routes.forEach((r, i) => {
+    const current = Object.prototype.hasOwnProperty.call(iconOverrides, i) ? iconOverrides[i] : (r.icon_path || "");
+    const row = document.createElement("div");
+    row.className = "icon-row";
+
+    const name = document.createElement("span");
+    name.className = "rname";
+    name.textContent = r.name || r.short_name || ("ルート" + (i + 1));
+
+    const thumb = document.createElement("img");
+    thumb.className = "thumb";
+    setThumb(thumb, current);
+
+    const select = document.createElement("select");
+    select.appendChild(new Option("デフォルトのアイコンを使用", ""));
+    knownIcons.forEach(fn => select.appendChild(new Option(fn, "assets/" + fn)));
+    const currentFile = current.replace(/^assets\//, "");
+    if (current && !knownIcons.includes(currentFile)) {
+      select.appendChild(new Option(currentFile + "(現在の設定)", current));
+    }
+    select.value = current;
+    select.addEventListener("change", () => {
+      iconOverrides[i] = select.value;
+      setThumb(thumb, select.value);
+    });
+
+    const uploadLbl = document.createElement("label");
+    uploadLbl.className = "upload-lbl";
+    uploadLbl.textContent = "+ 新しい画像をアップロード";
+    const fileInp = document.createElement("input");
+    fileInp.type = "file";
+    fileInp.accept = "image/*";
+    uploadLbl.appendChild(fileInp);
+    fileInp.addEventListener("change", async () => {
+      const f = fileInp.files && fileInp.files[0];
+      if (!f) return;
+      uploadLbl.textContent = "アップロード中…";
+      uploadLbl.appendChild(fileInp);
+      const fd = new FormData();
+      fd.append("icon", f);
+      try {
+        const res = await fetch("/upload_icon", { method: "POST", body: fd });
+        const data = await res.json();
+        if (data.icon_path) {
+          if (!knownIcons.includes(data.filename)) knownIcons.push(data.filename);
+          iconOverrides[i] = data.icon_path;
+          renderIconPicker();
+        } else {
+          alert(data.error || "アップロードに失敗しました");
+          uploadLbl.textContent = "+ 新しい画像をアップロード";
+          uploadLbl.appendChild(fileInp);
+        }
+      } catch (e) {
+        alert("アップロードに失敗しました");
+        uploadLbl.textContent = "+ 新しい画像をアップロード";
+        uploadLbl.appendChild(fileInp);
+      }
+    });
+
+    row.append(name, thumb, select, uploadLbl);
+    wrap.appendChild(row);
+  });
+}
+
 function pollJob(jobId, statusEl, btn, doneLabel) {
   fetch("/status/" + jobId).then(r => r.json()).then(job => {
     if (job.status === "running") {
@@ -288,6 +412,8 @@ document.querySelectorAll(".card[data-slug]").forEach(card => {
   });
 });
 
+document.getElementById("paste-json").addEventListener("input", debounce(renderIconPicker, 400));
+
 document.getElementById("file-input").addEventListener("change", (e) => {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
@@ -296,6 +422,8 @@ document.getElementById("file-input").addEventListener("change", (e) => {
     document.getElementById("paste-json").value = text;
     clipStatus.className = "status ok";
     clipStatus.textContent = file.name + " を読み込みました";
+    iconOverrides = {};
+    renderIconPicker();
   }).catch(() => {
     clipStatus.className = "status err";
     clipStatus.textContent = "ファイルの読み込みに失敗しました";
@@ -319,6 +447,8 @@ document.getElementById("clip-btn").addEventListener("click", async () => {
     document.getElementById("paste-json").value = text;
     clipStatus.className = "status ok";
     clipStatus.textContent = "貼り付けました";
+    iconOverrides = {};
+    renderIconPicker();
   } catch (e) {
     clipStatus.className = "status err";
     clipStatus.textContent = "自動で読み取れませんでした。テキストエリアを選んで手動で貼り付けて(Ctrl+V / Cmd+V)ください";
@@ -328,7 +458,19 @@ document.getElementById("clip-btn").addEventListener("click", async () => {
 document.getElementById("paste-btn").addEventListener("click", () => {
   const btn = document.getElementById("paste-btn");
   const statusEl = document.getElementById("paste-status");
-  const text = document.getElementById("paste-json").value;
+  let text = document.getElementById("paste-json").value;
+  try {
+    const cfg = JSON.parse(text);
+    if (Array.isArray(cfg.routes)) {
+      cfg.routes.forEach((r, i) => {
+        if (Object.prototype.hasOwnProperty.call(iconOverrides, i)) {
+          if (iconOverrides[i]) r.icon_path = iconOverrides[i];
+          else delete r.icon_path;
+        }
+      });
+      text = JSON.stringify(cfg);
+    }
+  } catch (e) { /* JSON構文エラーはこの後のサーバー側チェックに任せる */ }
   const fast = document.getElementById("paste-fast").checked;
   const outName = document.getElementById("paste-outname").value.trim();
   btn.disabled = true;
@@ -361,7 +503,31 @@ document.getElementById("paste-btn").addEventListener("click", () => {
 
 @app.route("/")
 def index():
-    return render_template_string(PAGE, configs=list_configs())
+    return render_template_string(PAGE, configs=list_configs(), icons=list_icon_assets())
+
+
+@app.route("/assets/<path:filename>")
+def serve_asset(filename):
+    return send_from_directory(ASSETS_DIR, filename)
+
+
+@app.route("/upload_icon", methods=["POST"])
+def upload_icon():
+    f = request.files.get("icon")
+    if not f or not f.filename:
+        return jsonify({"error": "ファイルが選択されていません"}), 400
+    orig = Path(f.filename)
+    ext = orig.suffix.lower()
+    if ext not in ALLOWED_ICON_EXT:
+        return jsonify({"error": "対応していない形式です(png / jpg / jpeg / webp / gif のみ)"}), 400
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "_", orig.stem).strip("_")[:60] or "icon"
+    dest = ASSETS_DIR / f"{stem}{ext}"
+    n = 1
+    while dest.exists():
+        dest = ASSETS_DIR / f"{stem}_{n}{ext}"
+        n += 1
+    f.save(dest)
+    return jsonify({"filename": dest.name, "icon_path": f"assets/{dest.name}"})
 
 
 @app.route("/generate/<slug>", methods=["POST"])
