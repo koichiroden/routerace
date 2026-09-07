@@ -205,6 +205,8 @@ PAGE = """<!doctype html>
   .paste-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
   input.outname { font: inherit; font-size: 12.5px; padding: 6px 8px; border-radius: 6px;
                    border: 1px solid #ded2ba; background: #fbf8f2; color: #201c16; width: 200px; }
+  select.config-picker { font: inherit; font-size: 12.5px; padding: 6px 8px; border-radius: 6px;
+                          border: 1px solid #ded2ba; background: #fbf8f2; color: #201c16; }
   label.outname-label { font-size: 12.5px; color: #766c5c; display: flex; align-items: center; gap: 6px; }
   input[type="file"] { font-size: 12.5px; }
   .icon-picker { margin-top: 12px; border-top: 1px dashed #ded2ba; padding-top: 4px; }
@@ -225,10 +227,16 @@ PAGE = """<!doctype html>
   <h2 class="section">① JSONを用意して生成</h2>
   <div class="card">
     <p style="margin-top:0; font-size:13px; color:#766c5c;">
-      駅レースビルダーで作ったconfig JSONを、ファイルから読み込むか、貼り付けて生成できます
-      (<span class="slug">configs/&lt;slug&gt;.json</span> として保存されます)。
+      駅レースビルダーで作ったconfig JSONを、<span class="slug">configs/</span>から選ぶか、ファイルから読み込むか、貼り付けて生成できます
+      (新規の場合は <span class="slug">configs/&lt;slug&gt;.json</span> として保存されます)。
     </p>
     <div class="paste-actions" style="margin-top:0; margin-bottom:8px;">
+      <select class="config-picker" id="config-picker">
+        <option value="">— configs/ から選んで読み込む —</option>
+        {% for c in configs %}
+        <option value="{{ c.slug }}">{{ c.title }} ({{ c.slug }}.json)</option>
+        {% endfor %}
+      </select>
       <input type="file" id="file-input" accept=".json,application/json">
       <button id="clip-btn" type="button">📋 クリップボードから貼り付け</button>
       <span class="status" id="clip-status" style="margin-top:0;"></span>
@@ -414,6 +422,27 @@ document.querySelectorAll(".card[data-slug]").forEach(card => {
 
 document.getElementById("paste-json").addEventListener("input", debounce(renderIconPicker, 400));
 
+document.getElementById("config-picker").addEventListener("change", async (e) => {
+  const slug = e.target.value;
+  const clipStatus = document.getElementById("clip-status");
+  if (!slug) return;
+  clipStatus.className = "status";
+  clipStatus.textContent = "読み込んでいます…";
+  try {
+    const res = await fetch("/config_json/" + encodeURIComponent(slug));
+    const text = await res.text();
+    if (!res.ok) throw new Error(text);
+    document.getElementById("paste-json").value = text;
+    clipStatus.className = "status ok";
+    clipStatus.textContent = slug + ".json を読み込みました";
+    iconOverrides = {};
+    renderIconPicker();
+  } catch (err) {
+    clipStatus.className = "status err";
+    clipStatus.textContent = "読み込みに失敗しました";
+  }
+});
+
 document.getElementById("file-input").addEventListener("change", (e) => {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
@@ -528,6 +557,20 @@ def upload_icon():
         n += 1
     f.save(dest)
     return jsonify({"filename": dest.name, "icon_path": f"assets/{dest.name}"})
+
+
+@app.route("/config_json/<slug>")
+def config_json(slug):
+    valid = {c["slug"] for c in list_configs()}
+    if slug not in valid:
+        return jsonify({"error": "そのconfigは見つかりません"}), 404
+    path = CONFIGS_DIR / f"{slug}.json"
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = f.read()
+    except OSError as e:
+        return jsonify({"error": str(e)}), 500
+    return data, 200, {"Content-Type": "application/json; charset=utf-8"}
 
 
 @app.route("/generate/<slug>", methods=["POST"])
