@@ -51,6 +51,17 @@ _OUT_NAME_BAD_RE = re.compile(r"[\\/\x00-\x1f]")
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # アイコン画像は8MBまで
 
+
+@app.after_request
+def _no_cache(resp):
+    # このアプリは自分のPC上でapp.pyを書き換えて再起動する運用なので、
+    # ブラウザがページ/JSONを古いままキャッシュしてしまうと「直したのに
+    # 反映されない(機能が消えたように見える)」という混乱が起きやすい。
+    # そのため常にキャッシュさせない。
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
 jobs = {}
 jobs_lock = threading.Lock()
 
