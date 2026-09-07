@@ -4,9 +4,11 @@
 どのレース設定(config)でも使えるように汎用化してある。
 """
 import json
+from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-from .geo import compute_projection, project, CANVAS_W, CANVAS_H
+from .geo import compute_projection, project, unproject, CANVAS_W, CANVAS_H
 from . import fonts as _fonts
 
 FONT_BOLD, FONT_REGULAR, FONT_BLACK = _fonts.resolve()
@@ -25,6 +27,120 @@ def load_all_lines(geojson_path):
         coords_list = [geom["coordinates"]] if geom["type"] == "LineString" else geom["coordinates"]
         out.append((feat["properties"]["line_name"], coords_list))
     return out
+
+
+def load_land_polygons(geojson_path):
+    """海岸線(陸地の輪郭)データを読み込み、外周リングのリストを返す。
+    元データに穴(湖など)は無いことを確認済みなので外周だけで良い。
+    ファイルが無い場合は空リストを返し、海の表現なしで従来どおり動く。"""
+    p = Path(geojson_path)
+    if not p.exists():
+        return []
+    with open(p, encoding="utf-8") as f:
+        data = json.load(f)
+    rings = []
+    for feat in data["features"]:
+        geom = feat["geometry"]
+        polys = geom["coordinates"] if geom["type"] == "MultiPolygon" else [geom["coordinates"]]
+        for poly in polys:
+            if poly:
+                rings.append(poly[0])
+    return rings
+
+
+def _lerp_at_x(a, b, x):
+    ax, ay = a
+    bx, by = b
+    t = 0.0 if bx == ax else (x - ax) / (bx - ax)
+    return (x, ay + (by - ay) * t)
+
+
+def _lerp_at_y(a, b, y):
+    ax, ay = a
+    bx, by = b
+    t = 0.0 if by == ay else (y - ay) / (by - ay)
+    return (ax + (bx - ax) * t, y)
+
+
+def _clip_half_plane(points, keep, intersect):
+    if not points:
+        return points
+    out = []
+    prev = points[-1]
+    prev_in = keep(prev)
+    for cur in points:
+        cur_in = keep(cur)
+        if cur_in:
+            if not prev_in:
+                out.append(intersect(prev, cur))
+            out.append(cur)
+        elif prev_in:
+            out.append(intersect(prev, cur))
+        prev, prev_in = cur, cur_in
+    return out
+
+
+def clip_ring_to_bbox(ring, lon_min, lon_max, lat_min, lat_max):
+    """Sutherland-Hodgman法で、矩形(表示範囲)の外にある陸地ポリゴンの
+    大部分を先に切り落とす。海岸線データは日本全体規模なので、これを
+    せずに描画しようとすると座標が巨大になり重く/不安定になるため。"""
+    pts = ring
+    pts = _clip_half_plane(pts, lambda p: p[0] >= lon_min, lambda a, b: _lerp_at_x(a, b, lon_min))
+    pts = _clip_half_plane(pts, lambda p: p[0] <= lon_max, lambda a, b: _lerp_at_x(a, b, lon_max))
+    pts = _clip_half_plane(pts, lambda p: p[1] >= lat_min, lambda a, b: _lerp_at_y(a, b, lat_min))
+    pts = _clip_half_plane(pts, lambda p: p[1] <= lat_max, lambda a, b: _lerp_at_y(a, b, lat_max))
+    return pts
+
+
+def draw_land_and_sea(canvas, proj, land_rings, land_color=(23, 22, 20, 225),
+                       coast_color=(150, 205, 230, 130)):
+    """陸地を塗り、海岸線をうっすら光らせて、どこが海でどこが陸か
+    分かるようにする(海=背景のグラデーションのまま)。"""
+    if not land_rings:
+        return
+
+    margin = 140
+    corners = [
+        unproject(proj, -margin, -margin),
+        unproject(proj, CANVAS_W + margin, -margin),
+        unproject(proj, -margin, CANVAS_H + margin),
+        unproject(proj, CANVAS_W + margin, CANVAS_H + margin),
+    ]
+    lon_min = min(c[0] for c in corners)
+    lon_max = max(c[0] for c in corners)
+    lat_min = min(c[1] for c in corners)
+    lat_max = max(c[1] for c in corners)
+
+    land_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    ld = ImageDraw.Draw(land_layer)
+    coast_layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    cd = ImageDraw.Draw(coast_layer)
+
+    for ring in land_rings:
+        clipped = clip_ring_to_bbox(ring, lon_min, lon_max, lat_min, lat_max)
+        if len(clipped) < 3:
+            continue
+        pts = [project(proj, lon, lat) for lon, lat in clipped]
+        ld.polygon(pts, fill=land_color)
+
+        # 海岸線そのもの(切り取り範囲の縁ではなく実際の陸地の輪郭だけ)は、
+        # 表示範囲内かどうかをピクセル座標で緩く判定して描く。
+        full_pts = [project(proj, lon, lat) for lon, lat in ring]
+        in_view = [-80 <= x <= CANVAS_W + 80 and -80 <= y <= CANVAS_H + 80 for x, y in full_pts]
+        seg = []
+        for pt, ok in zip(full_pts, in_view):
+            if ok:
+                seg.append(pt)
+            elif seg:
+                if len(seg) >= 2:
+                    cd.line(seg, fill=coast_color, width=3, joint="curve")
+                seg = []
+        if len(seg) >= 2:
+            cd.line(seg, fill=coast_color, width=3, joint="curve")
+
+    canvas.alpha_composite(land_layer)
+    coast_layer = coast_layer.filter(ImageFilter.GaussianBlur(1.2))
+    canvas.alpha_composite(coast_layer)
 
 
 def vertical_gradient(w, h, top_color, bottom_color):
@@ -69,7 +185,14 @@ def render_base_map(config, paths, geojson_path="data/routes.geojson"):
     bg = vertical_gradient(CANVAS_W, CANVAS_H, (8, 12, 28), (2, 4, 12))
     canvas = bg.convert("RGBA")
 
+    # 海と陸地: 背景のグラデーションをそのまま海として使い、陸地だけを
+    # うっすら塗って海岸線を光らせる(データが無い場合は何も描かず、
+    # 従来どおり全面が背景グラデーションのまま)。
+    land_rings = load_land_polygons(str(Path(geojson_path).parent / "coastline.geojson"))
+    draw_land_and_sea(canvas, proj, land_rings)
+
     # 背景テクスチャ: 全路線をうす暗いグレーで描画(表示範囲外は自然に切れる)
+    # レース中の路線と見分けやすいよう、以前より少しだけ濃くしてある。
     faint = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
     fd = ImageDraw.Draw(faint)
     for name, segs in all_lines:
@@ -77,7 +200,7 @@ def render_base_map(config, paths, geojson_path="data/routes.geojson"):
             pts = [project(proj, lon, lat) for lon, lat in seg]
             pts = [p for p in pts if -50 <= p[0] <= CANVAS_W + 50 and -50 <= p[1] <= CANVAS_H + 50]
             if len(pts) >= 2:
-                fd.line(pts, fill=(120, 140, 190, 40), width=2, joint="curve")
+                fd.line(pts, fill=(150, 170, 210, 70), width=2, joint="curve")
     canvas.alpha_composite(faint)
 
     # 比較ルート(発光ライン)。後に描画した方が手前に見える。
