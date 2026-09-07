@@ -133,6 +133,10 @@ PAGE = """<!doctype html>
       Claudeとのチャットなどで作ったconfig JSONをそのまま貼り付けて生成できます
       (<span class="slug">configs/&lt;slug&gt;.json</span> として保存されます)。
     </p>
+    <div class="paste-actions" style="margin-top:0; margin-bottom:8px;">
+      <button id="clip-btn" type="button">📋 クリップボードから貼り付け</button>
+      <span class="status" id="clip-status" style="margin-top:0;"></span>
+    </div>
     <textarea class="jsonbox" id="paste-json" placeholder='{"slug": "...", "routes": [...] }'></textarea>
     <div class="paste-actions">
       <label class="fast"><input type="checkbox" id="paste-fast" checked> 低画質プレビュー(高速)</label>
@@ -202,6 +206,29 @@ document.querySelectorAll(".card[data-slug]").forEach(card => {
         else { statusEl.className = "status err"; statusEl.textContent = data.error || "開始できませんでした"; btn.disabled = false; btn.textContent = "生成する"; }
       });
   });
+});
+
+document.getElementById("clip-btn").addEventListener("click", async () => {
+  const clipStatus = document.getElementById("clip-status");
+  clipStatus.className = "status";
+  clipStatus.textContent = "";
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      throw new Error("unsupported");
+    }
+    const text = await navigator.clipboard.readText();
+    if (!text || !text.trim()) {
+      clipStatus.className = "status err";
+      clipStatus.textContent = "クリップボードが空でした";
+      return;
+    }
+    document.getElementById("paste-json").value = text;
+    clipStatus.className = "status ok";
+    clipStatus.textContent = "貼り付けました";
+  } catch (e) {
+    clipStatus.className = "status err";
+    clipStatus.textContent = "自動で読み取れませんでした。テキストエリアを選んで手動で貼り付けて(Ctrl+V / Cmd+V)ください";
+  }
 });
 
 document.getElementById("paste-btn").addEventListener("click", () => {
