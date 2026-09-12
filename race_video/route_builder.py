@@ -92,6 +92,37 @@ def pick_best_segment(segments, pt):
     return best
 
 
+def best_segment_match(segments, pt, prefer_last=False):
+    """全セグメント(MultiLineStringの各枝)の中から pt に最も近い点を探し、
+    (segment_index, point_index, dist_km) を返す。"""
+    best = None
+    for si, seg in enumerate(segments):
+        i, d = nearest_index(seg, pt, prefer_last=prefer_last)
+        if best is None or d < best[2]:
+            best = (si, i, d)
+    return best
+
+
+def find_junction(seg_a, seg_b):
+    """2つの枝(seg_a, seg_b)がどこで接続しているかを探す。
+
+    湘南新宿ライン・上野東京ラインのように、複数の実在路線が合流・分岐する
+    路線は、routes.geojson 上では複数本のLineString(MultiLineString)として
+    格納されており、それぞれの支線は本線から分岐する地点(駅、例: 大宮)を
+    始点/終点として作られている。そのため、両セグメントの「端点同士」の
+    組み合わせだけを調べれば接続点が見つかる(全点同士の総当りは不要)。
+    戻り値: (idx_in_seg_a, idx_in_seg_b, dist_km)
+    """
+    candidates = []
+    for ia, pa in ((0, seg_a[0]), (len(seg_a) - 1, seg_a[-1])):
+        ib, d = nearest_index(seg_b, pa)
+        candidates.append((ia, ib, d))
+    for ib, pb in ((0, seg_b[0]), (len(seg_b) - 1, seg_b[-1])):
+        ia, d = nearest_index(seg_a, pb)
+        candidates.append((ia, ib, d))
+    return min(candidates, key=lambda c: c[2])
+
+
 def cumulative_dist(coords):
     cum = [0.0]
     for i in range(1, len(coords)):
@@ -308,20 +339,41 @@ def build_route(route_cfg, line_geoms, station_db):
             )
             piece = [pt_start, pt_end]
         else:
-            seg_coords, idx_start, d0 = pick_best_segment(segments, pt_start)
+            seg_i0, idx_start, d0 = best_segment_match(segments, pt_start)
             # pt_end 側は prefer_last=True にして、環状路線(大江戸線など)で
             # 同じ駅の座標が複数回登場する場合に「より進行方向側」の
             # (=環を一周した後の)出現を選ぶ。通常の路線では同じ座標の
             # 重複が無いため、この変更による挙動の変化はない。
-            idx_end, d1 = nearest_index(seg_coords, pt_end, prefer_last=True)
+            seg_i1, idx_end, d1 = best_segment_match(segments, pt_end, prefer_last=True)
             if d0 > 1.0:
                 warnings.append(f"{resolved[si]['name']} のスナップ誤差 {d0:.2f}km")
             if d1 > 1.0:
                 warnings.append(f"{resolved[ei]['name']} のスナップ誤差 {d1:.2f}km")
-            if idx_start <= idx_end:
-                piece = seg_coords[idx_start:idx_end + 1]
+
+            if seg_i0 == seg_i1:
+                seg_coords = segments[seg_i0]
+                if idx_start <= idx_end:
+                    piece = seg_coords[idx_start:idx_end + 1]
+                else:
+                    piece = list(reversed(seg_coords[idx_end:idx_start + 1]))
             else:
-                piece = list(reversed(seg_coords[idx_end:idx_start + 1]))
+                # 湘南新宿ライン・上野東京ラインのように、始点と終点が別々の
+                # 支線(MultiLineStringの別要素)に属している場合、支線同士が
+                # 実際に繋がっている地点(junction)を探して、そこで2本の
+                # ポリラインを繋ぎ合わせる。
+                seg_a, seg_b = segments[seg_i0], segments[seg_i1]
+                ja, jb, jd = find_junction(seg_a, seg_b)
+                if jd > 1.0:
+                    warnings.append(
+                        f"'{line_name}' の支線接続点にズレがあります({jd:.2f}km): "
+                        f"{resolved[si]['name']}-{resolved[ei]['name']} 間"
+                    )
+                part_a = seg_a[idx_start:ja + 1] if idx_start <= ja else list(reversed(seg_a[ja:idx_start + 1]))
+                part_b = seg_b[jb:idx_end + 1] if jb <= idx_end else list(reversed(seg_b[idx_end:jb + 1]))
+                if part_a and part_b and part_a[-1] == part_b[0]:
+                    piece = part_a[:-1] + part_b
+                else:
+                    piece = part_a + part_b
 
         if polyline and piece and polyline[-1] == piece[0]:
             piece = piece[1:]
