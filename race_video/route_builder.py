@@ -64,11 +64,20 @@ def load_line_geoms(geojson_path):
     return lines
 
 
-def nearest_index(coords, pt):
-    best_i, best_d = 0, float("inf")
-    for i, c in enumerate(coords):
-        d = haversine_km(c, pt)
-        if d < best_d:
+def nearest_index(coords, pt, start=0, prefer_last=False):
+    """coords[start:] の中から pt に最も近い点のインデックス(coords全体基準)を返す。
+
+    大江戸線のような「環状+尻尾」路線では、同じ駅(例: 都庁前)の座標が
+    1本のLineString中に複数回登場する(環を一周して戻ってくるため)。
+    その場合、同じ最短距離を与える点が複数あり得るので、prefer_last=True
+    にすると、その中で最も後ろ(=進行方向により先)のインデックスを選ぶ。
+    既定(prefer_last=False)は従来通り、最初に見つかった最短点を選ぶ。
+    """
+    best_i, best_d = start, float("inf")
+    cmp = (lambda d, best_d: d <= best_d) if prefer_last else (lambda d, best_d: d < best_d)
+    for i in range(start, len(coords)):
+        d = haversine_km(coords[i], pt)
+        if cmp(d, best_d):
             best_d = d
             best_i = i
     return best_i, best_d
@@ -192,11 +201,28 @@ def remove_single_vertex_noise(coords, bearing_jump_deg=BACKTRACK_BEARING_DEG,
     return coords, warnings
 
 
-def remove_backtracking(coords):
-    """collapse_revisits -> remove_single_vertex_noise の順に適用するショートカット。"""
-    coords, w1 = collapse_revisits(coords)
+def remove_backtracking(coords, skip_collapse=False):
+    """collapse_revisits -> remove_single_vertex_noise の順に適用するショートカット。
+
+    skip_collapse=True の場合は collapse_revisits(同じ地点の再訪を「ループ状の
+    デジタイズ誤差」とみなして畳み込む処理)を飛ばす。大江戸線のように、
+    路線そのものが本当に環状(尻尾+ループ)になっていて、同じ駅(都庁前)の
+    座標を意図的に2回通る場合、collapse_revisits がこれを誤検出して
+    ループ区間をまるごと消してしまうため。
+    """
+    if skip_collapse:
+        w1 = []
+    else:
+        coords, w1 = collapse_revisits(coords)
     coords, w2 = remove_single_vertex_noise(coords)
     return coords, w1 + w2
+
+
+# 路線そのものが環状(+尻尾)になっていて、同じ駅の座標を1本のLineString内で
+# 意図的に2回通る路線。build_route() はこれらの路線が絡むルートについて、
+# collapse_revisits(ループを「デジタイズ誤差」とみなして畳み込む処理)を
+# スキップする。
+LOOP_LINES = {"大江戸線"}
 
 
 def _fill_missing_t_min(station_records, route_label):
@@ -283,7 +309,11 @@ def build_route(route_cfg, line_geoms, station_db):
             piece = [pt_start, pt_end]
         else:
             seg_coords, idx_start, d0 = pick_best_segment(segments, pt_start)
-            idx_end, d1 = nearest_index(seg_coords, pt_end)
+            # pt_end 側は prefer_last=True にして、環状路線(大江戸線など)で
+            # 同じ駅の座標が複数回登場する場合に「より進行方向側」の
+            # (=環を一周した後の)出現を選ぶ。通常の路線では同じ座標の
+            # 重複が無いため、この変更による挙動の変化はない。
+            idx_end, d1 = nearest_index(seg_coords, pt_end, prefer_last=True)
             if d0 > 1.0:
                 warnings.append(f"{resolved[si]['name']} のスナップ誤差 {d0:.2f}km")
             if d1 > 1.0:
@@ -297,14 +327,22 @@ def build_route(route_cfg, line_geoms, station_db):
             piece = piece[1:]
         polyline.extend(piece)
 
-    polyline, back_warnings = remove_backtracking(polyline)
+    involves_loop_line = any(resolve_line_name(line_name) in LOOP_LINES for line_name, _, _ in seg_ranges)
+    polyline, back_warnings = remove_backtracking(polyline, skip_collapse=involves_loop_line)
     warnings.extend(back_warnings)
 
     cum = cumulative_dist(polyline)
 
+    # 駅ごとに polyline 上の位置(path_index)を探す際、前の駅より後ろ側だけを
+    # 探索するようにする(search_from)。これにより、大江戸線の都庁前のように
+    # 同じ駅の座標が polyline 内に複数回登場する場合でも、config内の並び順
+    # (=実際に通る順番)通りに、それぞれ正しい方の出現位置に対応付けられる。
+    # 通常の(座標の重複が無い)路線では、この制約があっても結果は変わらない。
     station_records = []
+    search_from = 0
     for s in resolved:
-        idx, d = nearest_index(polyline, (s["lon"], s["lat"]))
+        idx, d = nearest_index(polyline, (s["lon"], s["lat"]), start=search_from)
+        search_from = idx
         station_records.append({
             "name": s["name"],
             "line": s["line"],
