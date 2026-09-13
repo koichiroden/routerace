@@ -16,8 +16,8 @@
 import random
 
 START_TEMPLATES = [
-    "さぁ来ました{start}駅!{a}と{b}、{end}までの最速対決、スタートです!!",
-    "{start}駅に{a}、{b}が並びました!{end}までどちらが早いのか、レーススタート!!",
+    "さぁ来ました{start}駅!{matchup}、{end}までの最速対決、スタートです!!",
+    "{start}駅に{matchup}が並びました!{end}までどちらが早いのか、レーススタート!!",
 ]
 PASS_TEMPLATES = [
     "{route}、{station}を通過!",
@@ -42,6 +42,12 @@ FINISH_TEMPLATES = [
 RESULT_TEMPLATES = [
     "勝者は{winner}!その差、わずか{diff}分!{start}→{end}、最速の切符はどっちだ!?",
 ]
+RESULT_TIE_TEMPLATES = [
+    "なんという結末だ、{winners}が同時到着!{start}→{end}、まさかの引き分けです!!",
+]
+
+# 所要時間(分)がこの差以内なら「同時刻」= 引き分けとみなす
+TIE_EPSILON_MIN = 1e-6
 
 
 def _pick(pool, key, salt=""):
@@ -50,16 +56,26 @@ def _pick(pool, key, salt=""):
     return rnd.choice(pool)
 
 
+def _format_matchup(names):
+    """3路線以上でも自然な文になるように、路線名の並びを1つの句にする。
+    2つなら「AとB」、3つ以上なら「A、B、C」のように読点でつなぐ。"""
+    if len(names) <= 1:
+        return names[0] if names else ""
+    if len(names) == 2:
+        return f"{names[0]}と{names[1]}"
+    return "、".join(names)
+
+
 def build_events(config, paths, intro_sec, ratio_sec_per_min):
     routes = list(paths.values())
-    a, b = routes[0], routes[1]
-    start_name = config.get("start_name", a["stations"][0]["name"])
-    end_label = config.get("end_label", a["stations"][-1]["name"])
+    start_name = config.get("start_name", routes[0]["stations"][0]["name"])
+    end_label = config.get("end_label", routes[0]["stations"][-1]["name"])
 
     events = []  # (real_min, speaker_key, speaker_label, text)
 
+    matchup = _format_matchup([r["name"] for r in routes])
     events.append((0, "system", "実況",
-                    START_TEMPLATES[0].format(start=start_name, a=a["name"], b=b["name"], end=end_label)))
+                    START_TEMPLATES[0].format(start=start_name, matchup=matchup, end=end_label)))
 
     for route in routes:
         for st in route["stations"]:
@@ -82,12 +98,21 @@ def build_events(config, paths, intro_sec, ratio_sec_per_min):
                 text = tmpl.format(route=route["name"], station=st["name"])
                 events.append((st["t_min"], route["key"], route["short_name"], text))
 
-    diff = abs(a["total_min"] - b["total_min"])
-    winner = a["name"] if a["total_min"] <= b["total_min"] else b["name"]
-    result_min = max(a["total_min"], b["total_min"]) + 1
-    events.append((result_min, "result", "RESULT",
-                    RESULT_TEMPLATES[0].format(winner=winner, diff=int(diff),
-                                                start=start_name, end=end_label)))
+    best_time = min(r["total_min"] for r in routes)
+    winners = [r for r in routes if abs(r["total_min"] - best_time) <= TIE_EPSILON_MIN]
+    result_min = max(r["total_min"] for r in routes) + 1
+    if len(winners) >= 2:
+        winners_text = "、".join(r["name"] for r in winners)
+        events.append((result_min, "result", "RESULT",
+                        RESULT_TIE_TEMPLATES[0].format(winners=winners_text,
+                                                        start=start_name, end=end_label)))
+    else:
+        winner = winners[0]
+        other_times = [r["total_min"] for r in routes if r is not winner]
+        diff = min(other_times) - best_time
+        events.append((result_min, "result", "RESULT",
+                        RESULT_TEMPLATES[0].format(winner=winner["name"], diff=int(diff),
+                                                    start=start_name, end=end_label)))
 
     events.sort(key=lambda e: e[0])
 

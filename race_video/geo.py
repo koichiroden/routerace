@@ -5,9 +5,19 @@ import math
 CANVAS_W = 1080
 CANVAS_H = 1920
 
+# リール/ショート動画のUI(キャプション・アイコン等)が上下にかぶる
+# 「セーフゾーン」。縦方向に8分割した時の一番上・一番下の1区画
+# (それぞれ CANVAS_H/8 = 240px)には、タイトルとプログレスバーを
+# 一切入れないようにする。地図(路線・駅)自体はこの区画にはみ出しても
+# 構わないが、タイトル/凡例(render_base.py)とスコアボード(animate.py)
+# はこの定数を基準に、必ず内側に収まるよう計算する。
+SAFE_ZONE_PX = CANVAS_H // 8       # 240
+SAFE_TOP_Y = SAFE_ZONE_PX          # 240: タイトルはこれより下に
+SAFE_BOTTOM_Y = CANVAS_H - SAFE_ZONE_PX  # 1680: プログレスバーはこれより上に
+
 # 地図を描画する領域(上部はタイトル、下部はスコアボード分を空ける)
-MAP_TOP = 300
-MAP_BOTTOM = 1680
+MAP_TOP = 470
+MAP_BOTTOM = 1540
 MAP_LEFT = 60
 MAP_RIGHT = 1020
 

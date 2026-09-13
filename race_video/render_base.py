@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-from .geo import compute_projection, project, unproject, CANVAS_W, CANVAS_H
+from .geo import compute_projection, project, unproject, CANVAS_W, CANVAS_H, MAP_BOTTOM, SAFE_TOP_Y
 from . import fonts as _fonts
 
 FONT_BOLD, FONT_REGULAR, FONT_BLACK = _fonts.resolve()
@@ -241,14 +241,31 @@ def render_base_map(config, paths, geojson_path="data/routes.geojson"):
     draw.text((fx, fy + 42), "FINISH", font=font(FONT_BLACK, 24, index=0), fill=(255, 215, 0, 255), anchor="mm")
     draw.text((fx, fy + 70), end_label, font=f_station, fill=(255, 255, 255, 255), anchor="mm")
 
+    # プログレスバーを「実際に描画された路線のすぐ下」に動的配置できるよう、
+    # 路線(+ FINISH表記)が画面上で一番下まで達しているY座標を控えておく。
+    # ルートが短く画面上部〜中央付近に収まる構成のときほど、この値は
+    # MAP_BOTTOM よりだいぶ小さくなる。
+    all_line_ys = [
+        project(proj, lon, lat)[1]
+        for route in route_list
+        for lon, lat in route["polyline"]
+    ]
+    max_line_y = max(all_line_ys) if all_line_ys else MAP_BOTTOM
+    proj["content_bottom_y"] = max(max_line_y, fy + 90)
+
     # タイトル & 凡例
     f_title = font(FONT_BLACK, 60, index=0)
     f_sub = font(FONT_BOLD, 28)
     f_legend = font(FONT_BOLD, 28)
 
-    draw.text((CANVAS_W / 2, 90), config.get("title_line1", ""), font=f_title,
+    # タイトル/凡例は、リールUIのセーフゾーン(画面上端から1/8=SAFE_TOP_Y)
+    # より必ず下に来るように配置する(title_y1の文字上端がSAFE_TOP_Yより
+    # 十分下になるよう余白を確保)。
+    title_y1 = SAFE_TOP_Y + 50
+    title_y2 = title_y1 + 58
+    draw.text((CANVAS_W / 2, title_y1), config.get("title_line1", ""), font=f_title,
                fill=(255, 255, 255, 255), anchor="mm")
-    draw.text((CANVAS_W / 2, 148), config.get("title_line2", ""), font=f_sub,
+    draw.text((CANVAS_W / 2, title_y2), config.get("title_line2", ""), font=f_sub,
                fill=(255, 215, 0, 255), anchor="mm")
 
     n = len(route_list)
@@ -262,7 +279,7 @@ def render_base_map(config, paths, geojson_path="data/routes.geojson"):
         total_w += w + 40
     total_w -= 40
     cx = CANVAS_W / 2 - total_w / 2
-    ly = 208
+    ly = title_y2 + 60
     for r, w in zip(route_list, swatches):
         draw.ellipse([cx, ly - 12, cx + 24, ly + 12], fill=tuple(r["color"]) + (255,))
         draw.text((cx + 34, ly), r["name"], font=f_legend, fill=(255, 255, 255, 255), anchor="lm")

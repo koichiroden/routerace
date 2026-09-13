@@ -11,7 +11,7 @@ import subprocess
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-from .geo import project, CANVAS_W, CANVAS_H
+from .geo import project, CANVAS_W, CANVAS_H, SAFE_BOTTOM_Y
 from .motion import RouteMotion
 from .commentary import build_events, write_script_files
 from . import fonts as _fonts
@@ -166,14 +166,20 @@ def draw_caption(canvas_rgba, text, speaker, color, alpha=255):
     canvas_rgba.alpha_composite(layer)
 
 
-def draw_scoreboard(canvas_rgba, route_list, motions, real_mins):
+def draw_scoreboard(canvas_rgba, route_list, motions, real_mins, bar_top=None):
     layer = Image.new("RGBA", canvas_rgba.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
     f_name = font(FONT_BOLD, 30)
     f_time = font(FONT_BLACK, 30, index=0)
     bar_x0, bar_x1 = 230, 820
-    row_ys = [1810, 1880] if len(route_list) <= 2 else \
-        [1780 + i * 50 for i in range(len(route_list))]
+    n_routes = len(route_list)
+    gap = 70 if n_routes <= 2 else 50
+    if bar_top is None:
+        # render() から bar_top が渡されない呼び出し(単体テスト等)向けの
+        # フォールバック。SAFE_BOTTOM_Y(リールUIのセーフゾーン境界)より
+        # 絶対に下がらない位置を、render() 側と同じ式で逆算する。
+        bar_top = SAFE_BOTTOM_Y - 15 - 15 - gap * (n_routes - 1)
+    row_ys = [bar_top + i * gap for i in range(n_routes)]
     for route, y in zip(route_list, row_ys):
         color = tuple(route["color"])
         m = motions[route["key"]]
@@ -189,23 +195,34 @@ def draw_scoreboard(canvas_rgba, route_list, motions, real_mins):
     canvas_rgba.alpha_composite(layer)
 
 
+RESULT_TIE_EPSILON_MIN = 1e-6
+
+
 def draw_result_panel(canvas_rgba, config, route_list, alpha):
     layer = Image.new("RGBA", canvas_rgba.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
     d.rectangle([0, 0, CANVAS_W, CANVAS_H], fill=(0, 0, 0, int(140 * alpha / 255)))
     cx, cy = CANVAS_W / 2, CANVAS_H / 2 - 60
 
-    winner = min(route_list, key=lambda r: r["total_min"])
-    loser_times = [r["total_min"] for r in route_list if r is not winner]
-    diff = min(loser_times, default=winner["total_min"]) - winner["total_min"]
+    best_time = min(r["total_min"] for r in route_list)
+    winners = [r for r in route_list if abs(r["total_min"] - best_time) <= RESULT_TIE_EPSILON_MIN]
+    is_tie = len(winners) >= 2
 
     f_big = font(FONT_BLACK, 76, index=0)
     f_mid = font(FONT_BOLD, 40)
     f_small = font(FONT_BOLD, 32)
 
     d.text((cx, cy - 180), "RESULT", font=f_big, fill=(255, 215, 0, alpha), anchor="mm")
-    d.text((cx, cy - 90), f"{winner['name']} の勝ち!", font=f_mid, fill=(255, 255, 255, alpha), anchor="mm")
-    d.text((cx, cy - 40), f"( 差 {diff:.0f} 分 )", font=f_mid, fill=tuple(winner["color"]) + (alpha,), anchor="mm")
+    if is_tie:
+        winners_label = "・".join(r["name"] for r in winners)
+        d.text((cx, cy - 90), f"{winners_label} 同着!", font=f_mid, fill=(255, 255, 255, alpha), anchor="mm")
+        d.text((cx, cy - 40), "( 引き分け )", font=f_mid, fill=(255, 215, 0, alpha), anchor="mm")
+    else:
+        winner = winners[0]
+        other_times = [r["total_min"] for r in route_list if r is not winner]
+        diff = min(other_times) - best_time
+        d.text((cx, cy - 90), f"{winner['name']} の勝ち!", font=f_mid, fill=(255, 255, 255, alpha), anchor="mm")
+        d.text((cx, cy - 40), f"( 差 {diff:.0f} 分 )", font=f_mid, fill=tuple(winner["color"]) + (alpha,), anchor="mm")
 
     n = len(route_list)
     xs = [cx + (i - (n - 1) / 2) * 300 for i in range(n)]
@@ -226,8 +243,22 @@ def render(config, paths, base_map_rgba, proj, out_dir="output", frames_dir="fra
     motions = {r["key"]: RouteMotion(r) for r in route_list}
 
     intro_sec = config.get("intro_sec", 2.0)
-    ratio = config.get("compress_sec_per_min", 0.5)
     outro_hold = config.get("outro_hold_sec", OUTRO_HOLD_SEC)
+
+    # 動画の長さは「実1分を動画何秒に圧縮するか(compress_sec_per_min)」を
+    # 直接指定する古い方式と、「動画全体を何秒にしたいか(video_duration_sec、
+    # デフォルト30秒)」を指定してこちらから比率を逆算する新しい方式の
+    # どちらでも設定できる。config に compress_sec_per_min が明示されていれば
+    # そちらを優先する(過去のconfigとの互換性のため)。
+    if "compress_sec_per_min" in config:
+        ratio = config["compress_sec_per_min"]
+    else:
+        video_duration_sec = config.get("video_duration_sec", 30.0)
+        longest_total_min = max(r["total_min"] for r in route_list) if route_list else 1.0
+        # 末尾のRESULTテロップ(2.6秒)ぶんを差し引いた残りを、
+        # レース区間(イントロ〜ゴール+1分)に均等に割り当てる。
+        available = video_duration_sec - intro_sec - outro_hold - 2.6
+        ratio = max(0.05, available / max(longest_total_min + 1, 0.001))
 
     timeline = build_events(config, paths, intro_sec, ratio)
     write_script_files(timeline, config, paths, out_dir=out_dir)
@@ -250,6 +281,23 @@ def render(config, paths, base_map_rgba, proj, out_dir="output", frames_dir="fra
 
     result_start = max(m.total_min for m in motions.values()) * ratio + intro_sec + 1.0
     color_by_key = {r["key"]: tuple(r["color"]) for r in route_list}
+
+    # プログレスバーの表示位置: 路線の描画がコンパクトで画面上部〜中央寄りに
+    # 収まっている場合ほど、路線のすぐ下(+少し余白)まで詰める。
+    # ただし、リールUIのセーフゾーン(画面下端から1/8 = SAFE_BOTTOM_Y より下)
+    # には、どんな場合も絶対にプログレスバーがかからないようにする
+    # (詰める方向にのみ動く安全な調整で、この上限を超えて下げることはない)。
+    n_routes = len(route_list)
+    bar_gap = 70 if n_routes <= 2 else 50
+    # 最終行のテキスト(高さの半分約15px)がSAFE_BOTTOM_Yより上に収まるよう、
+    # 余白15pxを加えて逆算した「これ以上下げられない」上限。
+    default_bar_top = SAFE_BOTTOM_Y - 15 - 15 - bar_gap * (n_routes - 1)
+    content_bottom_y = proj.get("content_bottom_y")
+    if content_bottom_y is None:
+        bar_top = None
+    else:
+        bar_top = content_bottom_y + 50
+        bar_top = min(bar_top, default_bar_top)
 
     for fi in range(n_frames):
         t = fi / fps
@@ -279,7 +327,7 @@ def render(config, paths, base_map_rgba, proj, out_dir="output", frames_dir="fra
                 if 0 <= elapsed <= 1.6:
                     draw_popup(canvas, proj, st, elapsed, color_by_key[r["key"]])
 
-        draw_scoreboard(canvas, route_list, motions, real_mins)
+        draw_scoreboard(canvas, route_list, motions, real_mins, bar_top=bar_top)
 
         if show_captions:
             for ev in timeline:
