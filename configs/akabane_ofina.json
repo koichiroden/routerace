@@ -11,7 +11,7 @@
     {
       "key": "route_a",
       "name": "湘南新宿ライン_普通",
-      "short_name": "湘南新宿_普通",
+      "short_name": "SSL_普通",
       "color": [
         247,
         38,
@@ -21,32 +21,44 @@
       "stations": [
         {
           "line": "湘南新宿ライン",
-          "name": "大船",
+          "name": "赤羽",
           "t_min": 0,
           "popup": true
         },
         {
           "line": "湘南新宿ライン",
-          "name": "戸塚",
-          "t_min": 4,
+          "name": "池袋",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "新宿",
+          "t_min": 16,
           "popup": true
         },
         {
           "line": "湘南新宿ライン",
-          "name": "東戸塚",
+          "name": "渋谷",
           "t_min": null,
           "popup": false
         },
         {
           "line": "湘南新宿ライン",
-          "name": "保土ヶ谷",
+          "name": "恵比寿",
           "t_min": null,
           "popup": false
         },
         {
           "line": "湘南新宿ライン",
-          "name": "横浜",
-          "t_min": 16,
+          "name": "大崎",
+          "t_min": 29,
+          "popup": true
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "武蔵小杉",
+          "t_min": 40,
           "popup": true
         },
         {
@@ -57,50 +69,32 @@
         },
         {
           "line": "湘南新宿ライン",
-          "name": "武蔵小杉",
-          "t_min": 29,
+          "name": "横浜",
+          "t_min": 52,
           "popup": true
         },
         {
           "line": "湘南新宿ライン",
-          "name": "西大井",
+          "name": "保土ヶ谷",
           "t_min": null,
           "popup": false
         },
         {
           "line": "湘南新宿ライン",
-          "name": "大崎",
-          "t_min": 38,
-          "popup": true
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "恵比寿",
+          "name": "東戸塚",
           "t_min": null,
           "popup": false
         },
         {
           "line": "湘南新宿ライン",
-          "name": "渋谷",
-          "t_min": 45,
+          "name": "戸塚",
+          "t_min": 64,
           "popup": true
         },
         {
           "line": "湘南新宿ライン",
-          "name": "新宿",
-          "t_min": 50,
-          "popup": true
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "池袋",
-          "t_min": 59,
-          "popup": true
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "赤羽",
-          "t_min": 68,
+          "name": "大船",
+          "t_min": 69,
           "popup": true
         }
       ]
@@ -108,7 +102,7 @@
     {
       "key": "route_b",
       "name": "湘南新宿ライン_特別快速",
-      "short_name": "湘南新宿_特快",
+      "short_name": "SSL_特快",
       "color": [
         248,
         13,
@@ -118,51 +112,27 @@
       "stations": [
         {
           "line": "湘南新宿ライン",
-          "name": "大船",
+          "name": "赤羽",
           "t_min": 0,
           "popup": true
         },
         {
           "line": "湘南新宿ライン",
-          "name": "戸塚",
-          "t_min": 5,
-          "popup": true
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "東戸塚",
+          "name": "池袋",
           "t_min": null,
           "popup": false
         },
         {
           "line": "湘南新宿ライン",
-          "name": "保土ヶ谷",
+          "name": "新宿",
+          "t_min": 17,
+          "popup": true
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "渋谷",
           "t_min": null,
           "popup": false
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "横浜",
-          "t_min": 14,
-          "popup": true
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "新川崎",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "武蔵小杉",
-          "t_min": 25,
-          "popup": true
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "大崎",
-          "t_min": 34,
-          "popup": true
         },
         {
           "line": "湘南新宿ライン",
@@ -172,26 +142,50 @@
         },
         {
           "line": "湘南新宿ライン",
-          "name": "渋谷",
-          "t_min": 40,
+          "name": "大崎",
+          "t_min": 29,
           "popup": true
         },
         {
           "line": "湘南新宿ライン",
-          "name": "新宿",
-          "t_min": 45,
+          "name": "武蔵小杉",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "新川崎",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "横浜",
+          "t_min": 48,
           "popup": true
         },
         {
           "line": "湘南新宿ライン",
-          "name": "池袋",
-          "t_min": 51,
+          "name": "保土ヶ谷",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "東戸塚",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "戸塚",
+          "t_min": 58,
           "popup": true
         },
         {
           "line": "湘南新宿ライン",
-          "name": "赤羽",
-          "t_min": 61,
+          "name": "大船",
+          "t_min": 63,
           "popup": true
         }
       ]
@@ -199,7 +193,7 @@
     {
       "key": "route_lv8ewo",
       "name": "上野東京ライン_普通",
-      "short_name": "上野東京_普通",
+      "short_name": "UTL_普通",
       "color": [
         244,
         101,
@@ -208,50 +202,8 @@
       "stations": [
         {
           "line": "上野東京ライン",
-          "name": "大船",
+          "name": "赤羽",
           "t_min": 0,
-          "popup": true
-        },
-        {
-          "line": "上野東京ライン",
-          "name": "戸塚",
-          "t_min": 4,
-          "popup": true
-        },
-        {
-          "line": "上野東京ライン",
-          "name": "横浜",
-          "t_min": 14,
-          "popup": true
-        },
-        {
-          "line": "上野東京ライン",
-          "name": "川崎",
-          "t_min": 23,
-          "popup": true
-        },
-        {
-          "line": "上野東京ライン",
-          "name": "品川",
-          "t_min": 32,
-          "popup": true
-        },
-        {
-          "line": "上野東京ライン",
-          "name": "新橋",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "上野東京ライン",
-          "name": "東京",
-          "t_min": 40,
-          "popup": true
-        },
-        {
-          "line": "上野東京ライン",
-          "name": "上野",
-          "t_min": 47,
           "popup": true
         },
         {
@@ -262,7 +214,49 @@
         },
         {
           "line": "上野東京ライン",
-          "name": "赤羽",
+          "name": "上野",
+          "t_min": 11,
+          "popup": true
+        },
+        {
+          "line": "上野東京ライン",
+          "name": "東京",
+          "t_min": 18,
+          "popup": true
+        },
+        {
+          "line": "上野東京ライン",
+          "name": "新橋",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "上野東京ライン",
+          "name": "品川",
+          "t_min": 26,
+          "popup": true
+        },
+        {
+          "line": "上野東京ライン",
+          "name": "川崎",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "上野東京ライン",
+          "name": "横浜",
+          "t_min": 43,
+          "popup": true
+        },
+        {
+          "line": "上野東京ライン",
+          "name": "戸塚",
+          "t_min": 53,
+          "popup": true
+        },
+        {
+          "line": "上野東京ライン",
+          "name": "大船",
           "t_min": 59,
           "popup": true
         }
@@ -279,188 +273,38 @@
       ],
       "stations": [
         {
-          "line": "根岸線",
-          "name": "大船",
+          "line": "京浜東北線",
+          "name": "赤羽",
           "t_min": 0,
           "popup": true
         },
         {
-          "line": "根岸線",
-          "name": "本郷台",
+          "line": "京浜東北線",
+          "name": "東十条",
           "t_min": null,
           "popup": false
         },
         {
-          "line": "根岸線",
-          "name": "港南台",
-          "t_min": 8,
-          "popup": true
-        },
-        {
-          "line": "根岸線",
-          "name": "洋光台",
+          "line": "京浜東北線",
+          "name": "王子",
           "t_min": null,
           "popup": false
         },
         {
-          "line": "根岸線",
-          "name": "新杉田",
+          "line": "京浜東北線",
+          "name": "上中里",
           "t_min": null,
           "popup": false
         },
         {
-          "line": "根岸線",
-          "name": "磯子",
-          "t_min": 17,
-          "popup": true
-        },
-        {
-          "line": "根岸線",
-          "name": "根岸",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "根岸線",
-          "name": "山手",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "根岸線",
-          "name": "石川町",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "根岸線",
-          "name": "関内",
-          "t_min": 26,
-          "popup": true
-        },
-        {
-          "line": "根岸線",
-          "name": "桜木町",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "根岸線",
-          "name": "横浜",
-          "t_min": 32,
+          "line": "京浜東北線",
+          "name": "田端",
+          "t_min": 10,
           "popup": true
         },
         {
           "line": "京浜東北線",
-          "name": "東神奈川",
-          "t_min": 35,
-          "popup": true
-        },
-        {
-          "line": "京浜東北線",
-          "name": "新子安",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "京浜東北線",
-          "name": "鶴見",
-          "t_min": 41,
-          "popup": true
-        },
-        {
-          "line": "京浜東北線",
-          "name": "川崎",
-          "t_min": 45,
-          "popup": true
-        },
-        {
-          "line": "京浜東北線",
-          "name": "蒲田",
-          "t_min": 51,
-          "popup": true
-        },
-        {
-          "line": "京浜東北線",
-          "name": "大森",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "京浜東北線",
-          "name": "大井町",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "京浜東北線",
-          "name": "品川",
-          "t_min": 60,
-          "popup": true
-        },
-        {
-          "line": "京浜東北線",
-          "name": "高輪ゲートウェイ",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "京浜東北線",
-          "name": "田町",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "京浜東北線",
-          "name": "浜松町",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "京浜東北線",
-          "name": "新橋",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "京浜東北線",
-          "name": "有楽町",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "京浜東北線",
-          "name": "東京",
-          "t_min": 71,
-          "popup": true
-        },
-        {
-          "line": "京浜東北線",
-          "name": "神田",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "京浜東北線",
-          "name": "秋葉原",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "京浜東北線",
-          "name": "御徒町",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "京浜東北線",
-          "name": "上野",
-          "t_min": 79,
-          "popup": true
-        },
-        {
-          "line": "京浜東北線",
-          "name": "鶯谷",
+          "name": "西日暮里",
           "t_min": null,
           "popup": false
         },
@@ -472,38 +316,188 @@
         },
         {
           "line": "京浜東北線",
-          "name": "西日暮里",
+          "name": "鶯谷",
           "t_min": null,
           "popup": false
         },
         {
           "line": "京浜東北線",
-          "name": "田端",
-          "t_min": 83,
+          "name": "上野",
+          "t_min": 14,
           "popup": true
         },
         {
           "line": "京浜東北線",
-          "name": "上中里",
+          "name": "御徒町",
           "t_min": null,
           "popup": false
         },
         {
           "line": "京浜東北線",
-          "name": "王子",
-          "t_min": 88,
+          "name": "秋葉原",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "神田",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "東京",
+          "t_min": 22,
           "popup": true
         },
         {
           "line": "京浜東北線",
-          "name": "東十条",
+          "name": "有楽町",
           "t_min": null,
           "popup": false
         },
         {
           "line": "京浜東北線",
-          "name": "赤羽",
-          "t_min": 93,
+          "name": "新橋",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "浜松町",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "田町",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "高輪ゲートウェイ",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "品川",
+          "t_min": 33,
+          "popup": true
+        },
+        {
+          "line": "京浜東北線",
+          "name": "大井町",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "大森",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "蒲田",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "川崎",
+          "t_min": 48,
+          "popup": true
+        },
+        {
+          "line": "京浜東北線",
+          "name": "鶴見",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "新子安",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "東神奈川",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "京浜東北線",
+          "name": "横浜",
+          "t_min": 62,
+          "popup": true
+        },
+        {
+          "line": "根岸線",
+          "name": "桜木町",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "根岸線",
+          "name": "関内",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "根岸線",
+          "name": "石川町",
+          "t_min": 69,
+          "popup": true
+        },
+        {
+          "line": "根岸線",
+          "name": "山手",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "根岸線",
+          "name": "根岸",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "根岸線",
+          "name": "磯子",
+          "t_min": 77,
+          "popup": true
+        },
+        {
+          "line": "根岸線",
+          "name": "新杉田",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "根岸線",
+          "name": "洋光台",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "根岸線",
+          "name": "港南台",
+          "t_min": 85,
+          "popup": true
+        },
+        {
+          "line": "根岸線",
+          "name": "本郷台",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "根岸線",
+          "name": "大船",
+          "t_min": 92,
           "popup": true
         }
       ]
