@@ -316,12 +316,6 @@
         },
         {
           "line": "横須賀線総武快速線",
-          "name": "東戸塚",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "横須賀線総武快速線",
           "name": "戸塚",
           "t_min": null,
           "popup": false
