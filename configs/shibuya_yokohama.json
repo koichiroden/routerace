@@ -1,23 +1,72 @@
 {
   "slug": "shibuya_yokohama",
-  "title_line1": "渋谷 → 横浜",
-  "title_line2": "どっちが早い!? 電車最速バトル",
+  "title_line1": "渋谷横浜",
+  "title_line2": "どっちが早い!?鉄道最速バトル",
   "start_name": "渋谷",
   "end_label": "横浜",
   "video_duration_sec": 30,
-  "intro_sec": 2,
-  "outro_hold_sec": 4,
+  "intro_sec": 5,
+  "outro_hold_sec": 2,
   "routes": [
     {
       "key": "route_a",
-      "name": "東急東横線",
-      "short_name": "東急",
+      "name": "JR湘南新宿ライン特快",
+      "short_name": "JR（特快）",
       "color": [
-        181,
-        26,
-        0
+        247,
+        132,
+        38
       ],
       "icon_path": "assets/odakyu_icon.png",
+      "stations": [
+        {
+          "line": "湘南新宿ライン",
+          "name": "渋谷",
+          "t_min": 0,
+          "popup": true
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "恵比寿",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "大崎",
+          "t_min": 5,
+          "popup": true
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "武蔵小杉",
+          "t_min": 13,
+          "popup": true
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "新川崎",
+          "t_min": null,
+          "popup": false
+        },
+        {
+          "line": "湘南新宿ライン",
+          "name": "横浜",
+          "t_min": 24,
+          "popup": true
+        }
+      ]
+    },
+    {
+      "key": "route_b",
+      "name": "東横線特急",
+      "short_name": "東横線",
+      "color": [
+        242,
+        2,
+        26
+      ],
+      "icon_path": "assets/jr_icon.png",
       "stations": [
         {
           "line": "東急東横線",
@@ -58,8 +107,8 @@
         {
           "line": "東急東横線",
           "name": "自由が丘",
-          "t_min": 8,
-          "popup": true
+          "t_min": null,
+          "popup": false
         },
         {
           "line": "東急東横線",
@@ -143,55 +192,6 @@
           "line": "東急東横線",
           "name": "横浜",
           "t_min": 28,
-          "popup": true
-        }
-      ]
-    },
-    {
-      "key": "route_b",
-      "name": "JR湘南新宿ライン",
-      "short_name": "湘南新宿",
-      "color": [
-        56,
-        87,
-        26
-      ],
-      "icon_path": "assets/jr_icon.png",
-      "stations": [
-        {
-          "line": "湘南新宿ライン",
-          "name": "渋谷",
-          "t_min": 0,
-          "popup": true
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "恵比寿",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "大崎",
-          "t_min": 6,
-          "popup": true
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "武蔵小杉",
-          "t_min": 15,
-          "popup": true
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "新川崎",
-          "t_min": null,
-          "popup": false
-        },
-        {
-          "line": "湘南新宿ライン",
-          "name": "横浜",
-          "t_min": 25,
           "popup": true
         }
       ]
