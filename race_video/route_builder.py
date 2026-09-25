@@ -253,7 +253,7 @@ def remove_backtracking(coords, skip_collapse=False):
 # 意図的に2回通る路線。build_route() はこれらの路線が絡むルートについて、
 # collapse_revisits(ループを「デジタイズ誤差」とみなして畳み込む処理)を
 # スキップする。
-LOOP_LINES = {"大江戸線(外回り)", "大江戸線(内回り)", "大阪環状線"}
+LOOP_LINES = {"名古屋市営地下鉄名城線"}
 
 
 def _fill_missing_t_min(station_records, route_label):
